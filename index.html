@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GFN Game Browser</title>
+<style>
+:root{--bg:#0e1116;--card:#171c24;--line:#262d38;--tx:#e8ecf2;--mu:#8a95a6;--ac:#4cc3ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,sans-serif}
+header{padding:14px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
+h1{margin:0 0 8px;font-size:19px}
+input,select{background:var(--card);border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:10px;font-size:15px}
+#q{width:100%}
+.row{display:flex;gap:8px;margin-top:8px}
+.row input,.row select{flex:1;min-width:0}
+button{background:var(--ac);color:#04121c;border:0;border-radius:8px;padding:10px 14px;font-weight:600;font-size:14px;cursor:pointer}
+button.alt{background:var(--card);color:var(--tx);border:1px solid var(--line);padding:6px 10px;font-size:13px}
+#cnt{color:var(--mu);font-size:13px;padding:8px 14px 0}
+main{max-width:720px;margin:0 auto;padding:10px 12px 40px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:18px}
+.c>img{width:100%;display:block;aspect-ratio:460/215;object-fit:cover;background:#222}
+.in{padding:12px}
+.in h2{margin:0;font-size:18px}
+.mu{color:var(--mu);font-size:13px}
+.med{margin-top:10px;min-height:40px}
+.pl video{width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;display:block}
+.pl{position:relative;aspect-ratio:16/9;background:#000 center/cover;border-radius:8px;overflow:hidden}.pl iframe{position:absolute;inset:0;width:100%;height:100%;border:0}.pl video{height:100%}.th{display:flex;gap:6px;overflow-x:auto;margin-top:6px}
+.ss{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:4px}
+.ss img{height:130px;width:auto;border-radius:6px;display:block;cursor:zoom-in}
+.d{font-size:13px;color:var(--mu);margin:10px 0 0}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:20}
+#lb.on{display:flex}#lb img{max-width:100%;max-height:100%}
+</style></head><body>
+<header>
+<h1>GFN Game Browser</h1>
+<input id="q" type="search" placeholder="Search games">
+<div class="row"><select id="t"></select><input id="id" type="number" placeholder="Steam ID"><button id="add">Add</button><button id="key" class="alt">YT key</button></div>
+</header>
+<div id="cnt"></div>
+<main id="list"></main>
+<div id="lb"><img id="lbi" alt=""></div>
+<script>
+var G=[
+["Cyberpunk 2077",1091500,"RPG"],["Elden Ring",1245620,"Action RPG"],["Baldur's Gate 3",1086940,"RPG"],
+["Counter-Strike 2",730,"Shooter"],["Black Myth: Wukong",2358720,"Action RPG"],["Red Dead Redemption 2",1174180,"Open world"],
+["Grand Theft Auto V",271590,"Open world"],["The Witcher 3",292030,"RPG"],["Hades",1145360,"Roguelike"],
+["Helldivers 2",553850,"Shooter"],["Palworld",1623730,"Survival"],["Apex Legends",1172470,"Shooter"],
+["Dota 2",570,"MOBA"],["Lies of P",1627720,"Action RPG"],["Hogwarts Legacy",990080,"RPG"],
+["Stardew Valley",413150,"Simulation"],["Sekiro",814380,"Action RPG"],["Dark Souls III",374320,"Action RPG"],
+["Monster Hunter: World",582010,"Action RPG"],["Resident Evil 4",2050650,"Horror"],["Doom Eternal",782330,"Shooter"],
+["Destiny 2",1085660,"Shooter"],["PUBG: Battlegrounds",578080,"Shooter"],["Warframe",230410,"Shooter"],
+["Cities: Skylines",255710,"Simulation"],["Rust",252490,"Survival"],["Path of Exile",238960,"RPG"],
+["Forza Horizon 5",1551360,"Racing"],["Hollow Knight",367520,"Metroidvania"],["Terraria",105600,"Sandbox"],
+["Rainbow Six Siege",359550,"Shooter"],["Marvel Rivals",2767030,"Shooter"],["Starfield",1716740,"RPG"],
+["Fallout 4",377160,"RPG"],["Skyrim Special Edition",489830,"RPG"],["Sea of Thieves",1172620,"Adventure"],
+["No Man's Sky",275850,"Adventure"],["Civilization VI",289070,"Strategy"],["Satisfactory",526870,"Simulation"],
+["Valheim",892970,"Survival"],["Lethal Company",1966720,"Horror"],["Space Marine 2",2183900,"Shooter"],
+["Tekken 8",1778820,"Fighting"],["Street Fighter 6",1364780,"Fighting"],["Mortal Kombat 1",1971870,"Fighting"],
+["Control",870780,"Action"]];
+
+var CDN="https://cdn.cloudflare.steamstatic.com/steam/apps/";
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+function genres(){var s={};G.forEach(function(g){s[g[2]]=1});
+ $("t").innerHTML='<option value="">All genres</option>'+Object.keys(s).sort().map(function(x){return"<option>"+esc(x)+"</option>"}).join("")}
+function jget(u){var c=new AbortController(),t=setTimeout(function(){c.abort()},8000);
+ return fetch(u,{signal:c.signal}).then(function(r){clearTimeout(t);if(!r.ok)throw 0;return r.json()})}
+function pick(a,idf,df){var x=a.filter(function(i){return df(i)>=45})[0]||a[0];if(!x)throw 0;return{k:"yt",id:idf(x),dur:df(x)}}
+function ytfind(name){
+ var q=encodeURIComponent(name+" gameplay"),KEY=ls("ytk")||DEFKEY,r=[];
+ if(KEY)return jget("https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=5&safeSearch=moderate&q="+q+"&key="+encodeURIComponent(KEY)).then(function(j){var i=(j.items||[]).find(function(x){return x.id&&x.id.videoId});if(!i)throw 0;return{k:"yt",id:i.id.videoId,dur:0}});
+ ["https://pipedapi.kavin.rocks","https://pipedapi.adminforge.de"].forEach(function(h){r.push(jget(h+"/search?filter=videos&q="+q).then(function(j){return pick(j.items||[],function(i){return(i.url||"").split("v=")[1]},function(i){return i.duration||0})}))});
+ ["https://inv.nadeko.net","https://invidious.nerdvpn.net","https://yewtu.be"].forEach(function(h){r.push(jget(h+"/api/v1/search?type=video&q="+q).then(function(j){return pick(j,function(i){return i.videoId},function(i){return i.lengthSeconds||0})}))});
+ return Promise.any(r)}
+var DEFKEY="";
+var C={};
+function steamvid(id){
+ var u="https://store.steampowered.com/api/appdetails?appids="+id+"&cc=in&l=english",e=encodeURIComponent(u);
+ var T=[u,"https://corsproxy.io/?url="+e,"https://api.allorigins.win/raw?url="+e,"https://api.codetabs.com/v1/proxy?quest="+e];
+ return Promise.any(T.map(function(t){return jget(t).then(function(j){var d=j&&j[id]&&j[id].data,m=d&&d.movies&&d.movies[0];if(!m)throw 0;var x=m.mp4||{},w=m.webm||{},url=x.max||x["480"]||w.max||w["480"];if(!url)throw 0;return{k:"mp4",url:url,poster:m.thumbnail}})}))}
+var P={},Q=[],busy=0;
+function enqueue(fn){Q.push(fn);pump()}
+function pump(){while(busy<4&&Q.length){busy++;Q.shift()().then(done,done)}}
+function done(){busy--;pump()}
+function resolve(id,name){
+ var c=ls("w"+id);if(c){try{return Promise.resolve(JSON.parse(c))}catch(e){}}
+ // Prefer official Steam trailers when available; otherwise search for an embeddable YouTube gameplay video.
+ return steamvid(id).catch(function(){return ytfind(name)}).catch(function(){return{k:"link",url:"https://www.youtube.com/results?search_query="+encodeURIComponent(name+" gameplay")}}).then(function(r){if(r.k!="link")ls("w"+id,JSON.stringify(r));return r})}
+function ytsrc(v){var st=v.dur>=120?30:v.dur>=60?10:0;
+ return"https://www.youtube-nocookie.com/embed/"+v.id+"?playsinline=1&controls=1&rel=0&start="+st+"&end="+(st+20)+"&loop=1&playlist="+v.id}
+var vo=new IntersectionObserver(function(es){es.forEach(function(e){var pl=e.target,v=P[pl.closest(".c").dataset.id];if(!v)return;
+ var on=e.isIntersecting&&e.intersectionRatio>=.6;
+ if(v.k=="yt"){pl.innerHTML=on?'<iframe src="'+ytsrc(v)+'" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>':""}
+ else{var vd=pl.querySelector("video");if(!vd)return;if(on){var p=vd.play();if(p&&p.catch)p.catch(function(){})}else vd.pause()}})},{threshold:[0,.6]});
+var lo=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){lo.unobserve(e.target);load(e.target)}})},{rootMargin:"700px 0px"});
+function load(card){var id=+card.dataset.id,el=card.querySelector(".med"),name=card.dataset.n;
+ el.innerHTML='<span class="mu">Finding gameplay...</span>';
+ enqueue(function(){return resolve(id,name).then(function(v){show(el,id,v)}).catch(function(){
+  el.innerHTML='<span class="mu">Could not find a video.</span> <button class="alt" data-r="1">Retry</button>'})})}
+function clip(v){var st=0;
+ v.addEventListener("loadedmetadata",function(){st=v.duration>40?10:0;v.currentTime=st});
+ v.addEventListener("timeupdate",function(){if(v.currentTime>=st+20||v.currentTime<st-1)v.currentTime=st})}
+function show(el,id,v){P[id]=v;
+ if(v.k=="link"){el.innerHTML='<span class="mu">No embeddable video found.</span> <button class="alt" data-r="1">Retry</button>';return}
+ el.innerHTML='<div class="pl"></div>';var pl=el.firstChild;
+ if(v.k=="yt")pl.style.backgroundImage="url(https://i.ytimg.com/vi/"+v.id+"/hqdefault.jpg)";
+ else{pl.innerHTML='<video muted loop playsinline controls preload="metadata" poster="'+v.poster+'" src="'+v.url+'"></video>';clip(pl.firstChild)}
+ vo.observe(pl)}
+function render(){
+ var q=$("q").value.toLowerCase(),t=$("t").value;
+ var r=G.filter(function(g){return g[0].toLowerCase().indexOf(q)>-1&&(!t||g[2]==t)});
+ $("cnt").textContent=r.length+" games";
+ vo.disconnect();lo.disconnect();Q=[];
+ $("list").innerHTML=r.map(function(g){return'<section class="c" data-id="'+g[1]+'" data-n="'+esc(g[0])+'"><img loading="lazy" src="'+CDN+g[1]+'/header.jpg" alt=""><div class="in"><h2>'+esc(g[0])+'</h2><span class="mu">'+esc(g[2])+'</span><div class="med"></div></div></section>'}).join("")||'<p class="mu">No match. Try another name or add by Steam ID.</p>';
+ document.querySelectorAll(".c").forEach(function(c){lo.observe(c)})}
+$("list").onclick=function(e){var c=e.target.closest(".c");if(c&&e.target.dataset.r){ls("w"+c.dataset.id,"");load(c)}};
+$("q").oninput=render;$("t").onchange=render;
+$("add").onclick=function(){var v=$("id").value;if(!v)return;var n=prompt("Game name?");if(!n)return;G.unshift([n,+v,"Added"]);genres();$("id").value="";render()};
+$("key").onclick=function(){var k=prompt("Optional: paste a free YouTube Data API key for the most reliable videos (leave empty to clear)",ls("ytk")||"");if(k===null)return;ls("ytk",k.trim());alert("Saved. Reload the page.")};
+genres();render();
+</script></body></html>
